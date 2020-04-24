@@ -3,10 +3,37 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
+    android:gravity="center_horizontal"
     android:orientation="vertical"
     tools:context=".MainActivity">
 
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ImageView
+            android:id="@+id/photo_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:adjustViewBounds="true"
+            android:visibility="gone" />
+
+        <VideoView
+            android:id="@+id/video_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <Button
+        android:id="@+id/bt_all"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:onClick="takeAll"
+        android:text="拍照/录制" />
 
     <Button
         android:layout_width="wrap_content"
@@ -20,13 +47,5 @@
         android:layout_height="wrap_content"
         android:onClick="takeVideo"
         android:text="仅录制" />
-
-    <Button
-        android:id="@+id/bt_all"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:onClick="takeAll"
-        android:text="全部" />
-
 
 </LinearLayout>

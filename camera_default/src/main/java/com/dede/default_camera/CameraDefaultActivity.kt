@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.text.TextUtils
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import com.dede.default_camera.view.CaptureListener
@@ -99,13 +100,35 @@ class CameraDefaultActivity : AppCompatActivity() {
         maxDuration = intent.getIntExtra(EXTRA_RECORDER_MAX_DURATION, maxDuration)
         capture_layout.setButtonFeatures(status)
         capture_layout.setDuration(maxDuration)
+
         initEvent()
     }
 
     private fun onTakeVideo(video: Video?) {
         if (video == null) return
+
         iv_switch.visibility = View.GONE
+        photo_preview.visibility = View.GONE
+        fl_preview.visibility = View.VISIBLE
         video_preview.visibility = View.VISIBLE
+
+        val videoResolution = video.videoResolution
+        val width = videoResolution.width
+        val height = videoResolution.height
+        val targetHeight = resources.displayMetrics.heightPixels
+        val targetWidth = resources.displayMetrics.widthPixels
+        val wr = width / targetWidth
+        val hr = height / targetHeight
+        val layoutParams = video_preview.layoutParams
+        if (wr > hr) {
+            layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        } else {
+            layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        video_preview.layoutParams = layoutParams
+
         video_preview.setOnPreparedListener {
             video_preview.start()
         }
@@ -114,8 +137,11 @@ class CameraDefaultActivity : AppCompatActivity() {
     }
 
     private fun onTakePic(unit: Unit?) {
-        photo_preview.visibility = View.VISIBLE
+        video_preview.visibility = View.GONE
         iv_switch.visibility = View.GONE
+        fl_preview.visibility = View.VISIBLE
+        photo_preview.visibility = View.VISIBLE
+
         val transformationBitmap = transformationBitmap(captureFile)
         photo_preview.setImageBitmap(transformationBitmap)
         fotoapparat.stop()
@@ -126,24 +152,12 @@ class CameraDefaultActivity : AppCompatActivity() {
             return null
         }
         val sourcePath = sourceFile.absolutePath
-        val exifInterface = ExifInterface(sourcePath)
-        val orientationCode = exifInterface.getAttributeInt(
-            ExifInterface.TAG_ORIENTATION,
-            ExifInterface.ORIENTATION_NORMAL
-        )
-        val rotation = when (orientationCode) {
-            ExifInterface.ORIENTATION_NORMAL -> 0
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270
-            else -> 0
-        }
+
         val options = BitmapFactory.Options()
         options.inJustDecodeBounds = true
         BitmapFactory.decodeFile(sourcePath, options)
         var width = options.outWidth
         var height = options.outHeight
-
         val targetHeight = resources.displayMetrics.heightPixels
         val targetWidth = resources.displayMetrics.widthPixels
         if (width > targetWidth && height > targetHeight) {
@@ -155,6 +169,7 @@ class CameraDefaultActivity : AppCompatActivity() {
         options.inJustDecodeBounds = false
         var source = BitmapFactory.decodeFile(sourcePath, options)
 
+        val rotation = getImageRotate(sourcePath)
         if (rotation != 0) {
             // 旋转Bitmap
             width = source.width
@@ -166,6 +181,21 @@ class CameraDefaultActivity : AppCompatActivity() {
             temp.recycle()
         }
         return source
+    }
+
+    private fun getImageRotate(sourcePath: String): Int {
+        val exifInterface = ExifInterface(sourcePath)
+        val orientationCode = exifInterface.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+        return when (orientationCode) {
+            ExifInterface.ORIENTATION_NORMAL -> 0
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
+            else -> 0
+        }
     }
 
     private fun initEvent() {
@@ -181,12 +211,10 @@ class CameraDefaultActivity : AppCompatActivity() {
             override fun cancel() {
                 fotoapparat.start()
                 iv_switch.visibility = View.VISIBLE
-                photo_preview.visibility = View.GONE
-                video_preview.visibility = View.GONE
+                fl_preview.visibility = View.GONE
                 video_preview.stopPlayback()
 
                 deleteTempFile()// 删除临时文件
-                Log.i("CameraDefaultActivity", "cancel: ")
             }
         })
         capture_layout.setLeftClickListener {
@@ -224,10 +252,10 @@ class CameraDefaultActivity : AppCompatActivity() {
     private fun setResult() {
         val intent = Intent()
         if (::captureFile.isInitialized) {
-            intent.putExtra(EXTRA_CAPTURE_OUTPUT_PATH, captureFile.absoluteFile)
+            intent.putExtra(EXTRA_CAPTURE_OUTPUT_PATH, captureFile.absolutePath)
         }
         if (::recorderFile.isInitialized) {
-            intent.putExtra(EXTRA_RECORDER_OUTPUT_PATH, recorderFile.absoluteFile)
+            intent.putExtra(EXTRA_RECORDER_OUTPUT_PATH, recorderFile.absolutePath)
         }
         setResult(Activity.RESULT_OK, intent)
         finish()
@@ -260,10 +288,12 @@ class CameraDefaultActivity : AppCompatActivity() {
 
     private fun deleteTempFile() {
         GlobalScope.launch(Dispatchers.IO) {
-            if (!TextUtils.isEmpty(capturePath) && ::captureFile.isInitialized) {
+            if (TextUtils.isEmpty(capturePath) && ::captureFile.isInitialized) {
+                Log.i("CameraDefault", "clear file: " + captureFile)
                 captureFile.delete()
             }
-            if (!TextUtils.isEmpty(recorderPath) && ::recorderFile.isInitialized) {
+            if (TextUtils.isEmpty(recorderPath) && ::recorderFile.isInitialized) {
+                Log.i("CameraDefault", "clear file: " + recorderFile)
                 recorderFile.delete()
             }
         }

@@ -41,8 +41,6 @@ class VideoTaker internal constructor(
 
     // io.fotoapparat.hardware.Device
     private val device: Any
-    // T io.fotoapparat.hardware.CameraDevice
-    private val selectedCameraDevice: CompletableDeferred<*>
 
     private lateinit var mediaRecorder: MediaRecorder
 
@@ -52,13 +50,6 @@ class VideoTaker internal constructor(
             device = fotoapparat.fieldValue("device")
         } catch (e: Exception) {
             throw VideoTakeException("get Device instance error", e)
-        }
-
-        try {
-            // CompletableDeferred<io.fotoapparat.hardware.CameraDevice>
-            selectedCameraDevice = device.fieldValue("selectedCameraDevice")
-        } catch (e: Exception) {
-            throw VideoTakeException("get CameraDevice instance error", e)
         }
 
         cameraRenderer = device.safeFieldValue("cameraRenderer")
@@ -96,6 +87,8 @@ class VideoTaker internal constructor(
     }
 
     private suspend fun initRecorder(): MediaRecorder {
+        // CompletableDeferred<io.fotoapparat.hardware.CameraDevice>
+        val selectedCameraDevice = device.fieldValue<CompletableDeferred<*>>("selectedCameraDevice")
         val cameraDevice = selectedCameraDevice.await()
             ?: throw IllegalStateException("await CameraDevice error")
 
@@ -117,31 +110,38 @@ class VideoTaker internal constructor(
         logger?.log("normal videoBitRate: " + camcorderProfile.videoBitRate)
         logger?.log("normal videoFrameRate: " + camcorderProfile.videoFrameRate)
 
-        val parameters = camera?.parameters
-        if (parameters != null) {
-            val previewSize = fotoapparat.getCurrentParameters().await().previewResolution
+//        val parameters = camera?.parameters
+//        if (parameters != null) {
+        val previewSize = fotoapparat.getCurrentParameters().await().previewResolution
+//
+//            val vw = camcorderProfile.videoFrameWidth
+//            val vh = camcorderProfile.videoFrameHeight
+//            val vr = vw * 1f / vh
+//
+        val pw = previewSize.width
+        val ph = previewSize.height
+//            val pr = pw * 1f / ph
+        logger?.log("previewSize:  $pw : $ph")
+//
+//            if (pr != vr) {
+//                logger?.log("videoSize:  $vw : $vh")
+//                for (size in parameters.supportedPreviewSizes) {
+//                    Log.i("VideoTaker", "supportPreviewSize (${size.width}:${size.height})")
+//                }
+        // 宽高比不相同，需要修改预览宽高为视频宽高
+//                parameters.setPreviewSize(vw, vh)
+//                try {
+//                    camera.parameters = parameters
+//                } catch (e: Exception) {
+//                    e.printStackTrace()
+//                }
+//                val resolution = transformResolution(cameraOrientation, camcorderProfile)
+//                cameraRenderer?.setPreviewResolution(resolution)
+//            }
+//        }
 
-            val vw = camcorderProfile.videoFrameWidth
-            val vh = camcorderProfile.videoFrameHeight
-            val vr = vw * 1f / vh
-
-            val pw = previewSize.width
-            val ph = previewSize.height
-            val pr = pw * 1f / ph
-            logger?.log("previewSize:  $pw : $ph")
-
-            if (pr != vr) {
-                logger?.log("updatePreviewSize:  $vw : $vh")
-                // 宽高比不相同，需要修改预览宽高为视频宽高
-                parameters.setPreviewSize(vw, vh)
-                camera.parameters = parameters
-                val resolution = transformResolution(cameraOrientation, camcorderProfile)
-                cameraRenderer?.setPreviewResolution(resolution)
-            }
-        }
-
-        mediaRecorder.setCamera(camera)
         camera?.unlock()// 解锁相机
+        mediaRecorder.setCamera(camera)
 
         val preview = cameraRenderer?.getPreview()
         if (preview is Preview.Texture) {
