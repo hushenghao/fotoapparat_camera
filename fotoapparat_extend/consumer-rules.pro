@@ -1,0 +1,3 @@
+-keep class io.fotoapparat.hardware.CameraDevice {*;}
+-keep class io.fotoapparat.hardware.Device {*;}
+-keep class io.fotoapparat.characteristic.Characteristics {*;}

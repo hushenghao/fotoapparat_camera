@@ -1,0 +1,4 @@
+rootProject.name='Fotoapparat-Extend'
+include ':app'
+include ':fotoapparat_extend'
+include ':camera_default'
