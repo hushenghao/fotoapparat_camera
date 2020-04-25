@@ -26,9 +26,7 @@ import io.fotoapparat.log.logcat
 import io.fotoapparat.log.loggers
 import io.fotoapparat.parameter.Resolution
 import io.fotoapparat.parameter.ScaleType
-import io.fotoapparat.selector.ResolutionSelector
-import io.fotoapparat.selector.back
-import io.fotoapparat.selector.front
+import io.fotoapparat.selector.*
 import kotlinx.android.synthetic.main.activity_camera_default.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -77,12 +75,13 @@ class CameraDefaultActivity : AppCompatActivity() {
     }
 
     private fun cameraConfiguration(): CameraConfiguration {
-        // 自定义预览分辨率规则，使用16/9尺寸的最高像素
-        fun customHighestResolution(): ResolutionSelector = {
-            filter { it.aspectRatio == 16f / 9 }.maxBy(Resolution::area)
-        }
+        val ratioResolution = firstAvailable(
+            wideRatio(highestResolution()),// 16/9
+            standardRatio(highestResolution())// 4/3
+        )
         return CameraConfiguration.default().copy(
-            previewResolution = customHighestResolution()
+            previewResolution = ratioResolution,
+            pictureResolution = ratioResolution
         )
     }
 
@@ -259,7 +258,8 @@ class CameraDefaultActivity : AppCompatActivity() {
                 } else {
                     File(capturePath)
                 }
-                fotoapparat.takePicture()
+                fotoapparat.autoFocus()
+                    .takePicture()
                     .saveToFile(captureFile)
                     .whenAvailable(this@CameraDefaultActivity::onTakePic)
             }
@@ -297,17 +297,7 @@ class CameraDefaultActivity : AppCompatActivity() {
     }
 
     private fun toggleCamera() {
-        if (isFront) {
-            fotoapparat.switchTo(
-                lensPosition = back(),
-                cameraConfiguration = cameraConfiguration()
-            )
-        } else {
-            fotoapparat.switchTo(
-                lensPosition = front(),
-                cameraConfiguration = cameraConfiguration()
-            )
-        }
+        fotoapparat.switchTo(if (isFront) back() else front(), cameraConfiguration())
         isFront = !isFront
     }
 

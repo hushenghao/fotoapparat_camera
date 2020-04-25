@@ -9,13 +9,15 @@ import com.dede.fotoapparat_extend.exception.VideoTakeException
 import com.dede.fotoapparat_extend.reflect.fieldValue
 import com.dede.fotoapparat_extend.reflect.safeFieldValue
 import io.fotoapparat.Fotoapparat
-import io.fotoapparat.configuration.CameraConfiguration
+import io.fotoapparat.configuration.UpdateConfiguration
 import io.fotoapparat.error.CameraErrorCallback
 import io.fotoapparat.exception.camera.CameraException
 import io.fotoapparat.hardware.orientation.Orientation
 import io.fotoapparat.log.Logger
 import io.fotoapparat.log.logcat
 import io.fotoapparat.parameter.Resolution
+import io.fotoapparat.selector.aspectRatio
+import io.fotoapparat.selector.highestResolution
 import io.fotoapparat.view.CameraRenderer
 import io.fotoapparat.view.Preview
 import kotlinx.coroutines.*
@@ -77,10 +79,6 @@ class VideoTaker internal constructor(
             ?: 0
     }
 
-    private fun getSaveCameraConfiguration(device: Any): CameraConfiguration? {
-        return device.safeFieldValue<CameraConfiguration>("savedConfiguration")
-    }
-
     private suspend fun initRecorder(): MediaRecorder {
         // CompletableDeferred<io.fotoapparat.hardware.CameraDevice>
         val selectedCameraDevice = device.fieldValue<CompletableDeferred<*>>("selectedCameraDevice")
@@ -118,20 +116,16 @@ class VideoTaker internal constructor(
         if (pr != vr) {
             // 宽高比不相同，需要修改预览宽高为视频宽高
             logger.log("target videoSize:  $vw : $vh")
-            val saveCameraConfiguration = getSaveCameraConfiguration(device)
-            if (saveCameraConfiguration != null) {
-                val aspectRatio = when (cameraOrientation) {
-                    90, 270 -> vr
-                    else -> vh * 1f / vw
-                }
-                val newConfiguration = saveCameraConfiguration.copy(
-                    // 自定义预览分辨率规则，使用指定比例的最高像素
-                    previewResolution = {
-                        filter { it.aspectRatio == aspectRatio }.maxBy(Resolution::area)
-                    }
-                )
-                fotoapparat.updateConfiguration(newConfiguration)
+            val aspectRatio = when (cameraOrientation) {
+                90, 270 -> vr
+                else -> vh * 1f / vw
             }
+
+            val newConfiguration = UpdateConfiguration(
+                // 自定义预览分辨率规则，使用指定比例的最高像素
+                previewResolution = aspectRatio(aspectRatio, highestResolution())
+            )
+            fotoapparat.updateConfiguration(newConfiguration)
         }
 
         camera?.unlock()// 解锁相机
@@ -217,6 +211,7 @@ class VideoTaker internal constructor(
 
     fun startRecording() {
         logger.recordMethod()
+//        fotoapparat.autoFocus()
         job = (baseScope + CoroutineExceptionHandler { _, e ->
             mainThreadErrorCallback?.invoke(CameraException("startRecording error", e))
         }).launch {
