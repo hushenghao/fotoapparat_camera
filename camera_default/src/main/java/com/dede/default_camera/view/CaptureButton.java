@@ -295,14 +295,6 @@ public class CaptureButton extends View {
         @Override
         public void run() {
             state = STATE_LONG_PRESS;   //如果按下后经过500毫秒则会修改当前状态为长按状态
-//            //没有录制权限
-//            if (!CheckPermission.isCameraUseable(-1) || CheckPermission.getRecordState() != CheckPermission.STATE_SUCCESS) {
-//                state = STATE_IDLE;
-//                if (captureLisenter != null) {
-//                    captureLisenter.recordError();
-//                    return;
-//                }
-//            }
             //启动按钮动画，外圆变大，内圆缩小
             startRecordAnimation(
                     button_outside_radius,

@@ -9,10 +9,12 @@ import com.dede.fotoapparat_extend.exception.VideoTakeException
 import com.dede.fotoapparat_extend.reflect.fieldValue
 import com.dede.fotoapparat_extend.reflect.safeFieldValue
 import io.fotoapparat.Fotoapparat
+import io.fotoapparat.configuration.CameraConfiguration
 import io.fotoapparat.error.CameraErrorCallback
 import io.fotoapparat.exception.camera.CameraException
 import io.fotoapparat.hardware.orientation.Orientation
 import io.fotoapparat.log.Logger
+import io.fotoapparat.log.logcat
 import io.fotoapparat.parameter.Resolution
 import io.fotoapparat.view.CameraRenderer
 import io.fotoapparat.view.Preview
@@ -36,7 +38,7 @@ class VideoTaker internal constructor(
     }
 
     private var cameraRenderer: CameraRenderer? = null
-    private var logger: Logger? = null
+    private val logger: Logger
     private var mainThreadErrorCallback: CameraErrorCallback? = null
 
     // io.fotoapparat.hardware.Device
@@ -53,7 +55,7 @@ class VideoTaker internal constructor(
         }
 
         cameraRenderer = device.safeFieldValue("cameraRenderer")
-        logger = fotoapparat.safeFieldValue("logger")
+        logger = fotoapparat.safeFieldValue("logger") ?: logcat()
         mainThreadErrorCallback = fotoapparat.safeFieldValue("mainThreadErrorCallback")
     }
 
@@ -75,15 +77,8 @@ class VideoTaker internal constructor(
             ?: 0
     }
 
-    private fun transformResolution(cameraOrientation: Int, profile: CamcorderProfile): Resolution {
-        return when (cameraOrientation) {
-            90, 270 -> {
-                Resolution(profile.videoFrameHeight, profile.videoFrameWidth)
-            }
-            else -> {
-                Resolution(profile.videoFrameWidth, profile.videoFrameHeight)
-            }
-        }
+    private fun getSaveCameraConfiguration(device: Any): CameraConfiguration? {
+        return device.safeFieldValue<CameraConfiguration>("savedConfiguration")
     }
 
     private suspend fun initRecorder(): MediaRecorder {
@@ -103,42 +98,41 @@ class VideoTaker internal constructor(
             Resolution(camcorderProfile.videoFrameWidth, camcorderProfile.videoFrameHeight)
         video = Video(config.file, cameraOrientation, videoResolution)
 
-        logger?.log("cameraId: $cameraId")
-        logger?.log("cameraOrientation: $cameraOrientation")
-        logger?.log("videoFrameWidth: " + camcorderProfile.videoFrameWidth)
-        logger?.log("videoFrameHeight: " + camcorderProfile.videoFrameHeight)
-        logger?.log("normal videoBitRate: " + camcorderProfile.videoBitRate)
-        logger?.log("normal videoFrameRate: " + camcorderProfile.videoFrameRate)
+        logger.log("cameraId: $cameraId")
+        logger.log("cameraOrientation: $cameraOrientation")
+        logger.log("videoFrameWidth: " + camcorderProfile.videoFrameWidth)
+        logger.log("videoFrameHeight: " + camcorderProfile.videoFrameHeight)
+        logger.log("Default videoBitRate: " + camcorderProfile.videoBitRate)
+        logger.log("Default videoFrameRate: " + camcorderProfile.videoFrameRate)
 
-//        val parameters = camera?.parameters
-//        if (parameters != null) {
+        val vw = camcorderProfile.videoFrameWidth
+        val vh = camcorderProfile.videoFrameHeight
+        val vr = vw * 1f / vh
+
         val previewSize = fotoapparat.getCurrentParameters().await().previewResolution
-//
-//            val vw = camcorderProfile.videoFrameWidth
-//            val vh = camcorderProfile.videoFrameHeight
-//            val vr = vw * 1f / vh
-//
         val pw = previewSize.width
         val ph = previewSize.height
-//            val pr = pw * 1f / ph
-        logger?.log("previewSize:  $pw : $ph")
-//
-//            if (pr != vr) {
-//                logger?.log("videoSize:  $vw : $vh")
-//                for (size in parameters.supportedPreviewSizes) {
-//                    Log.i("VideoTaker", "supportPreviewSize (${size.width}:${size.height})")
-//                }
-        // 宽高比不相同，需要修改预览宽高为视频宽高
-//                parameters.setPreviewSize(vw, vh)
-//                try {
-//                    camera.parameters = parameters
-//                } catch (e: Exception) {
-//                    e.printStackTrace()
-//                }
-//                val resolution = transformResolution(cameraOrientation, camcorderProfile)
-//                cameraRenderer?.setPreviewResolution(resolution)
-//            }
-//        }
+        val pr = pw * 1f / ph
+        logger.log("previewSize:  $pw : $ph")
+
+        if (pr != vr) {
+            // 宽高比不相同，需要修改预览宽高为视频宽高
+            logger.log("target videoSize:  $vw : $vh")
+            val saveCameraConfiguration = getSaveCameraConfiguration(device)
+            if (saveCameraConfiguration != null) {
+                val aspectRatio = when (cameraOrientation) {
+                    90, 270 -> vr
+                    else -> vh * 1f / vw
+                }
+                val newConfiguration = saveCameraConfiguration.copy(
+                    // 自定义预览分辨率规则，使用指定比例的最高像素
+                    previewResolution = {
+                        filter { it.aspectRatio == aspectRatio }.maxBy(Resolution::area)
+                    }
+                )
+                fotoapparat.updateConfiguration(newConfiguration)
+            }
+        }
 
         camera?.unlock()// 解锁相机
         mediaRecorder.setCamera(camera)
@@ -171,7 +165,7 @@ class VideoTaker internal constructor(
             throw IllegalArgumentException("output file is dir")
         }
         if (output.exists()) {
-            logger?.log("output file already exists, deleted")
+            logger.log("output file already exists, deleted")
             output.delete()
         }
         output.createNewFile()
@@ -183,7 +177,7 @@ class VideoTaker internal constructor(
     }
 
     override fun onError(mr: MediaRecorder?, what: Int, extra: Int) {
-        logger?.log("MediaRecorder Error   what: ${what}, extra: ${extra}")
+        logger.log("MediaRecorder Error   what: ${what}, extra: ${extra}")
     }
 
     override fun onInfo(mr: MediaRecorder?, what: Int, extra: Int) {
@@ -222,7 +216,7 @@ class VideoTaker internal constructor(
     }
 
     fun startRecording() {
-        logger?.recordMethod()
+        logger.recordMethod()
         job = (baseScope + CoroutineExceptionHandler { _, e ->
             mainThreadErrorCallback?.invoke(CameraException("startRecording error", e))
         }).launch {
@@ -241,7 +235,7 @@ class VideoTaker internal constructor(
     }
 
     fun stopRecording(ignore: Boolean) {
-        logger?.recordMethod()
+        logger.recordMethod()
         if (!::mediaRecorder.isInitialized || !isRecording) {
             return
         }

@@ -24,7 +24,9 @@ import io.fotoapparat.configuration.CameraConfiguration
 import io.fotoapparat.log.fileLogger
 import io.fotoapparat.log.logcat
 import io.fotoapparat.log.loggers
+import io.fotoapparat.parameter.Resolution
 import io.fotoapparat.parameter.ScaleType
+import io.fotoapparat.selector.ResolutionSelector
 import io.fotoapparat.selector.back
 import io.fotoapparat.selector.front
 import kotlinx.android.synthetic.main.activity_camera_default.*
@@ -48,6 +50,8 @@ class CameraDefaultActivity : AppCompatActivity() {
         const val BUTTON_STATUS_ONLY_CAPTURE = 2
         const val BUTTON_STATUS_ONLY_RECORDER = 1
         const val BUTTON_STATUS_ALL = 0
+
+        private const val TAG = "CameraDefaultActivity"
     }
 
     private var isFront = false
@@ -72,6 +76,16 @@ class CameraDefaultActivity : AppCompatActivity() {
             .takeVideo(this::onTakeVideo)
     }
 
+    private fun cameraConfiguration(): CameraConfiguration {
+        // 自定义预览分辨率规则，使用16/9尺寸的最高像素
+        fun customHighestResolution(): ResolutionSelector = {
+            filter { it.aspectRatio == 16f / 9 }.maxBy(Resolution::area)
+        }
+        return CameraConfiguration.default().copy(
+            previewResolution = customHighestResolution()
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(
@@ -83,16 +97,22 @@ class CameraDefaultActivity : AppCompatActivity() {
         fotoapparat = Fotoapparat(
             context = this,
             focusView = focus_view,
-            view = camera_view,                   // view which will draw the camera preview
+            view = camera_view,                  // view which will draw the camera preview
             scaleType = ScaleType.CenterCrop,    // (optional) we want the preview to fill the view
             lensPosition = back(),               // (optional) we want back camera
-            cameraConfiguration = CameraConfiguration.default(), // (optional) define an advanced configuration
+            cameraConfiguration = cameraConfiguration(), // (optional) define an advanced configuration
             logger = loggers(                    // (optional) we want to log camera events in 2 places at once
-                logcat(),                   // ... in logcat
-                fileLogger(this)            // ... and to file
+                logcat(),                        // ... in logcat
+                fileLogger(this)          // ... and to file
             ),
             cameraErrorCallback = { error ->
-                error.printStackTrace()
+                if (error.javaClass.name == "io.fotoapparat.exception.camera.UnsupportedConfigurationException") {
+                    fotoapparat.switchTo(back(), CameraConfiguration.default())
+                    val message = error.localizedMessage ?: error.message ?: return@Fotoapparat
+                    logcat().log(message)
+                } else {
+                    error.printStackTrace()
+                }
             }   // (optional) log fatal errors
         )
 
@@ -117,10 +137,10 @@ class CameraDefaultActivity : AppCompatActivity() {
         val height = videoResolution.height
         val targetHeight = resources.displayMetrics.heightPixels
         val targetWidth = resources.displayMetrics.widthPixels
-        val wr = width / targetWidth
-        val hr = height / targetHeight
+        val vr = width / height
+        val sr = targetWidth / targetHeight
         val layoutParams = video_preview.layoutParams
-        if (wr > hr) {
+        if (vr > sr) {
             layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
         } else {
@@ -131,6 +151,10 @@ class CameraDefaultActivity : AppCompatActivity() {
 
         video_preview.setOnPreparedListener {
             video_preview.start()
+        }
+        video_preview.setOnErrorListener { mp, what, extra ->
+            Log.e(TAG, "video preview error ,what: ${what}, extra: ${extra}")
+            return@setOnErrorListener true
         }
         video_preview.setVideoURI(Uri.fromFile(video.sourceFile))
         fotoapparat.stop()
@@ -218,6 +242,7 @@ class CameraDefaultActivity : AppCompatActivity() {
             }
         })
         capture_layout.setLeftClickListener {
+            Log.i(TAG, "finish")
             finish()
         }
         capture_layout.setCaptureLisenter(object : CaptureListener {
@@ -275,12 +300,12 @@ class CameraDefaultActivity : AppCompatActivity() {
         if (isFront) {
             fotoapparat.switchTo(
                 lensPosition = back(),
-                cameraConfiguration = CameraConfiguration.default()
+                cameraConfiguration = cameraConfiguration()
             )
         } else {
             fotoapparat.switchTo(
                 lensPosition = front(),
-                cameraConfiguration = CameraConfiguration.default()
+                cameraConfiguration = cameraConfiguration()
             )
         }
         isFront = !isFront
