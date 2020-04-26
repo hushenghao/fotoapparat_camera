@@ -1,5 +1,6 @@
 package com.dede.default_camera
 
+import android.animation.ObjectAnimator
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -10,23 +11,25 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.Log
+import android.view.OrientationEventListener
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import com.dede.default_camera.view.CaptureListener
 import com.dede.default_camera.view.TypeListener
+import com.dede.fotoapparat_extend.ratioCameraConfiguration
 import com.dede.fotoapparat_extend.recorder.Video
 import com.dede.fotoapparat_extend.recorder.VideoTaker
-import com.dede.fotoapparat_extend.recorder.takeVideo
+import com.dede.fotoapparat_extend.takeVideo
 import io.fotoapparat.Fotoapparat
 import io.fotoapparat.configuration.CameraConfiguration
 import io.fotoapparat.log.fileLogger
 import io.fotoapparat.log.logcat
 import io.fotoapparat.log.loggers
-import io.fotoapparat.parameter.Resolution
 import io.fotoapparat.parameter.ScaleType
-import io.fotoapparat.selector.*
+import io.fotoapparat.selector.back
+import io.fotoapparat.selector.front
 import kotlinx.android.synthetic.main.activity_camera_default.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -74,16 +77,7 @@ class CameraDefaultActivity : AppCompatActivity() {
             .takeVideo(this::onTakeVideo)
     }
 
-    private fun cameraConfiguration(): CameraConfiguration {
-        val ratioResolution = firstAvailable(
-            wideRatio(highestResolution()),// 16/9
-            standardRatio(highestResolution())// 4/3
-        )
-        return CameraConfiguration.default().copy(
-            previewResolution = ratioResolution,
-            pictureResolution = ratioResolution
-        )
-    }
+    private lateinit var rotationListener: OrientationEventListener
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,7 +93,7 @@ class CameraDefaultActivity : AppCompatActivity() {
             view = camera_view,                  // view which will draw the camera preview
             scaleType = ScaleType.CenterCrop,    // (optional) we want the preview to fill the view
             lensPosition = back(),               // (optional) we want back camera
-            cameraConfiguration = cameraConfiguration(), // (optional) define an advanced configuration
+            cameraConfiguration = ratioCameraConfiguration(), // (optional) define an advanced configuration
             logger = loggers(                    // (optional) we want to log camera events in 2 places at once
                 logcat(),                        // ... in logcat
                 fileLogger(this)          // ... and to file
@@ -120,13 +114,37 @@ class CameraDefaultActivity : AppCompatActivity() {
         capture_layout.setButtonFeatures(status)
         capture_layout.setDuration(maxDuration)
 
+        rotationListener = object : OrientationEventListener(this) {
+            var lastRotation = 0
+            override fun onOrientationChanged(orientation: Int) {
+                if (!canDetectOrientation()) return
+
+                val closestRightAngle =
+                    360 - (orientation / 90 + if (orientation % 90 > 45) 1 else 0) * 90 % 360
+                val rotation =
+                    if (closestRightAngle > 180) closestRightAngle - 360 else closestRightAngle
+                if (lastRotation == rotation) {
+                    return
+                }
+                lastRotation = rotation
+
+                val rotationAnim = ObjectAnimator.ofFloat(
+                    iv_switch,
+                    "rotation",
+                    iv_switch.rotation,
+                    rotation.toFloat()
+                )
+                rotationAnim.duration = 300
+                rotationAnim.start()
+            }
+        }
+
         initEvent()
     }
 
     private fun onTakeVideo(video: Video?) {
         if (video == null) return
 
-        iv_switch.visibility = View.GONE
         photo_preview.visibility = View.GONE
         fl_preview.visibility = View.VISIBLE
         video_preview.visibility = View.VISIBLE
@@ -161,7 +179,6 @@ class CameraDefaultActivity : AppCompatActivity() {
 
     private fun onTakePic(unit: Unit?) {
         video_preview.visibility = View.GONE
-        iv_switch.visibility = View.GONE
         fl_preview.visibility = View.VISIBLE
         photo_preview.visibility = View.VISIBLE
 
@@ -253,6 +270,7 @@ class CameraDefaultActivity : AppCompatActivity() {
             }
 
             override fun takePictures() {
+                iv_switch.visibility = View.GONE
                 captureFile = if (TextUtils.isEmpty(capturePath)) {
                     PathGetter.generaCapturePath(this@CameraDefaultActivity)
                 } else {
@@ -269,6 +287,7 @@ class CameraDefaultActivity : AppCompatActivity() {
             }
 
             override fun recordStart() {
+                iv_switch.visibility = View.GONE
                 videoTaker.startRecording()
             }
         })
@@ -289,15 +308,17 @@ class CameraDefaultActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         fotoapparat.start()
+        rotationListener.enable()
     }
 
     override fun onStop() {
         super.onStop()
         fotoapparat.stop()
+        rotationListener.disable()
     }
 
     private fun toggleCamera() {
-        fotoapparat.switchTo(if (isFront) back() else front(), cameraConfiguration())
+        fotoapparat.switchTo(if (isFront) back() else front(), ratioCameraConfiguration())
         isFront = !isFront
     }
 
