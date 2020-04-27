@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.max
 
 /**
@@ -118,24 +119,28 @@ class CameraDefaultActivity : AppCompatActivity() {
             var lastRotation = 0
             override fun onOrientationChanged(orientation: Int) {
                 if (!canDetectOrientation()) return
-
                 val closestRightAngle =
-                    360 - (orientation / 90 + if (orientation % 90 > 45) 1 else 0) * 90 % 360
-                val rotation =
-                    if (closestRightAngle > 180) closestRightAngle - 360 else closestRightAngle
+                    (orientation / 90 + if (orientation % 90 > 45) 1 else 0) * 90 % 360
+                val rotation = (360 - closestRightAngle) % 360
                 if (lastRotation == rotation) {
                     return
                 }
-                lastRotation = rotation
-
+                Log.i(TAG, "onOrientationChanged: from $lastRotation to $rotation")
+                if (rotation == 0 && lastRotation == 270) {
+                    lastRotation = -90
+                } else if (rotation == 270 && lastRotation == 0) {
+                    lastRotation = 360
+                }
                 val rotationAnim = ObjectAnimator.ofFloat(
                     iv_switch,
                     "rotation",
-                    iv_switch.rotation,
+                    lastRotation.toFloat(),
                     rotation.toFloat()
                 )
                 rotationAnim.duration = 300
                 rotationAnim.start()
+
+                lastRotation = rotation
             }
         }
 
