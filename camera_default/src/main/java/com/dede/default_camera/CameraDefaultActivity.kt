@@ -35,7 +35,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlin.math.abs
 import kotlin.math.max
 
 /**
@@ -174,7 +173,7 @@ class CameraDefaultActivity : AppCompatActivity() {
         video_preview.setOnPreparedListener {
             video_preview.start()
         }
-        video_preview.setOnErrorListener { mp, what, extra ->
+        video_preview.setOnErrorListener { _, what, extra ->
             Log.e(TAG, "video preview error ,what: ${what}, extra: ${extra}")
             return@setOnErrorListener true
         }

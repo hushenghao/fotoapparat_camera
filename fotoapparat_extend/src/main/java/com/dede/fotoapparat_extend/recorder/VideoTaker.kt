@@ -36,7 +36,7 @@ class VideoTaker internal constructor(
             e.printStackTrace()
         }
 
-        val baseScope: CoroutineScope = MainScope() + errorHandler
+        internal val baseScope: CoroutineScope = MainScope() + errorHandler
     }
 
     private var cameraRenderer: CameraRenderer? = null
@@ -211,11 +211,11 @@ class VideoTaker internal constructor(
 
     fun startRecording() {
         logger.recordMethod()
-//        fotoapparat.autoFocus()
+
+        job?.cancel()
         job = (baseScope + CoroutineExceptionHandler { _, e ->
             mainThreadErrorCallback?.invoke(CameraException("startRecording error", e))
         }).launch {
-            Log.i("VideoTaker", "startRecording: " + isActive)
             val mediaRecorder = withContext(Dispatchers.IO) {
                 initRecorder().also { it.prepare() }
             }
@@ -242,9 +242,12 @@ class VideoTaker internal constructor(
             e.printStackTrace()
         }
         isRecording = false
-        if (!ignore) {
-            videoResult.invoke(video)
+
+        if (ignore) return
+        baseScope.launch {
+            video?.perfect()
         }
+        videoResult.invoke(video)
     }
 
 }
