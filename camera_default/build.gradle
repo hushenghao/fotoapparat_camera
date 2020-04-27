@@ -1,6 +1,7 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
+apply from: 'gradle-mvn-push-simpe.gradle'
 
 android {
     compileSdkVersion 29
@@ -33,7 +34,8 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.3.1'
     implementation 'io.fotoapparat:fotoapparat:2.7.0'
-    implementation project(path: ':fotoapparat_extend')
+//    implementation project(path: ':fotoapparat_extend')
+    implementation("com.che300.basic:fotoapparat-extend:1.0.0")
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
